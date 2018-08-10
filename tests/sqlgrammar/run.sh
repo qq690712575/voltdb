@@ -5,6 +5,9 @@
 # to the tests themselves, and shutting down the VoltDB server at the end.
 # These steps may be run separately, or all together.
 
+# This is not a real change, just a fake one to get Jenkins to run this branch
+# that is otherwise identical to master.
+
 # Run the <voltdb>/tests/test-tools.sh script, which contains useful functions
 function run-test-tools() {
     if [[ "$TT_DEBUG" -ge "2" ]]; then
