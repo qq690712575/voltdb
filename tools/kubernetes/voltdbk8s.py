@@ -41,7 +41,7 @@ def query_dns_srv(query):
     try:
         # SRV gives us records for each node in the cluster like ...
         # _service._proto.name.  TTL   class SRV priority weight port target.
-        #nginx.default.svc.cluster.local	service = 10 100 0 voltdb-0.nginx.default.svc.cluster.local.
+        #nginx.default.svc.cluster.local    service = 10 100 0 voltdb-0.nginx.default.svc.cluster.local.
         # the fqdn is structured as ... headless-service-name.namespace.svc.cluster.local
         # this is similar to etcd
         answers = subprocess.check_output(("nslookup -type=SRV %s" % query).split(' ')).split('\n')[2:]
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     if len(hn) != 4 or not ordinal.isdigit():
         # TODO: need a better check for running with k8s statfulset???
         # we don't know what do with this, just fork
-        fork_voltdb(fqhostname, None)
+        fork_voltdb(ssname+"-0."+domain, None)
 
     # if there are some pods up in our cluster, connect to the first one we find
     # if we fail to form/rejoin/join a cluster, k8s will likely just restart the pod
@@ -181,22 +181,24 @@ if __name__ == "__main__":
     # k8s starts one node at a time
     # if DNS is empty, and we are node-0, we are the first node up
     if len(my_cluster_members) == 0 and hn[1] == "0":
-        fork_voltdb(fqhostname, voltdbroot)
+        fork_voltdb(ssname+"-0."+domain, voltdbroot)
 
-    for host in my_cluster_members:
-        print "Connecting to '%s'" % host
-        if try_to_connect(host, VOLTDB_INTERNAL_INTERFACE):
-            # we may have found a running node, get voltdb SYSTEMINFORMATION
-            if try_to_connect(host, VOLTDB_HTTP_PORT):
-                sys_info = None
-                try:
-                    sys_info = get_system_information(host, VOLTDB_HTTP_PORT)
-                except:
-                    raise
-                print "sysinfo: " + str(sys_info)
-            # try to connect to mesh
-            fork_voltdb(host, voltdbroot)
+    #for host in my_cluster_members:
+    host = ssname+"-0."+domain
+    print "Connecting to '%s'" % host
+    if try_to_connect(host, VOLTDB_INTERNAL_INTERFACE):
+        # we may have found a running node, get voltdb SYSTEMINFORMATION
+        if try_to_connect(host, VOLTDB_HTTP_PORT):
+            sys_info = None
+            try:
+                sys_info = get_system_information(host, VOLTDB_HTTP_PORT)
+            except:
+                raise
+            print "sysinfo: " + str(sys_info)
+        # try to connect to mesh
+        fork_voltdb(host, voltdbroot)
 
     # we hope we don't get here
+    fork_voltdb(host, voltdbroot)
     print "ERROR: unable to find a suitable leader node to form/rejoin/join cluster '%s'" % domain
     sys.exit(-1)

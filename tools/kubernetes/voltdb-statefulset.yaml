@@ -4,6 +4,8 @@ metadata:
   name: --clusterName--
   labels:
     app: --clusterName--
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 spec:
   ports:
   - port: 8080
@@ -11,6 +13,7 @@ spec:
   clusterIP: None
   selector:
     app: --clusterName--
+  publishNotReadyAddresses: true
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -22,11 +25,24 @@ spec:
       app: --clusterName--
   serviceName: "--clusterName--"
   replicas: --replicaCount--
+  podManagementPolicy: Parallel
   template:
     metadata:
       labels:
         app: --clusterName--
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - --clusterName--
+              topologyKey: kubernetes.io/hostname
       terminationGracePeriodSeconds: 10
       containers:
       - name: --clusterName--
@@ -49,6 +65,12 @@ spec:
           requests:
            cpu: --cpuCount--
            memory: --memorySize--
+        readinessProbe:
+          exec:
+            command:
+            - test `echo "exec @Ping;" | ../../bin/sqlcmd --output-skip-metadata --output-format=csv`
+          initialDelaySeconds: 5
+          periodSeconds: 5
         env:
 #         Specify 'voltdb start ...' command line args (space separated list)
 #         IMPORTANT!!!! VoltDB requires linux kernel feature Transparent Huge Pages (THP) be DISABLED when running VoltDB in PRODUCTION.
