@@ -24,7 +24,7 @@ RUN add-apt-repository ppa:webupd8team/java
 RUN apt-get update
 RUN echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | sudo /usr/bin/debconf-set-selections
 RUN apt-get -y --no-install-recommends --no-install-suggests install oracle-java8-installer
-RUN apt-get -y --no-install-recommends --no-install-suggests install libxml2-utils procps python vim less
+RUN apt-get -y --no-install-recommends --no-install-suggests install libxml2-utils procps python vim less curl jq
 RUN apt-get -y --no-install-recommends --no-install-suggests install dnsutils net-tools iputils-ping telnet
 RUN apt-get -y --no-install-recommends --no-install-suggests install python-pip python-setuptools python-dev build-essential
 RUN pip install --upgrade pip
@@ -47,7 +47,7 @@ WORKDIR /opt
 RUN mkdir -p $VOLTDB_DIST
 COPY ./ $VOLTDB_DIST/
 RUN rm -rf $VOLTDB_DIST/doc $VOLTDB_DIST/examples
-COPY tools/kubernetes/voltdbk8s.py $VOLTDB_DIST/bin
+COPY tools/kubernetes/bin/ $VOLTDB_DIST/bin
 
 # Initialize pristine voltdbroot - it will be copied to persistent storage on first run of the node (k8s)
 ENV VOLTDBPRISTINE=/opt/voltdb_pristine

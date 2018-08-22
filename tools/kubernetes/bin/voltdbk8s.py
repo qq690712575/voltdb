@@ -154,6 +154,13 @@ if __name__ == "__main__":
     fqhostname = socket.getfqdn()
     print fqhostname
 
+    # for maintenance mode, don't bring up the database just hang
+    if '--maintenance' in sys.argv:
+        while True:
+            from time import sleep
+            sleep(10000)
+        #os.execv('tail' '-f', '/dev/null')
+
     # use the domain of the leader address to find other pods in our cluster
     hn = get_hostname_tuple(fqhostname)
     print hn
@@ -170,7 +177,6 @@ if __name__ == "__main__":
 
     # get a list of fq hostnames of pods in the domain from DNS SRV records
     my_cluster_members = query_dns_srv(domain)
-
 
     din = find_arg_index(sys.argv, '-D')
     if din:
@@ -198,7 +204,6 @@ if __name__ == "__main__":
         # try to connect to mesh
         fork_voltdb(host, voltdbroot)
 
-    # we hope we don't get here
     fork_voltdb(host, voltdbroot)
     print "ERROR: unable to find a suitable leader node to form/rejoin/join cluster '%s'" % domain
     sys.exit(-1)

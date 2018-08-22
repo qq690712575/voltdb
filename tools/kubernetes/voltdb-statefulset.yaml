@@ -43,7 +43,8 @@ spec:
                   values:
                   - --clusterName--
               topologyKey: kubernetes.io/hostname
-      terminationGracePeriodSeconds: 10
+      # nb. use voltadmin shutdown command to ensure the database process exits b4 k8s kills the pods
+      terminationGracePeriodSeconds: 30
       containers:
       - name: --clusterName--
         image: --containerImage---
@@ -63,20 +64,36 @@ spec:
           name: vmc
         resources:
           requests:
-           cpu: --cpuCount--
-           memory: --memorySize--
+#           cpu: --cpuCount--
+#           memory: --memorySize--
+        # For liveness/readiness checks, if security is enabled, provide userid/password, see https://docs.voltdb.com/UsingVoltDB/ProgLangJson.php
+        # For liveness probes, set the initialDelay to ensure the probe is not issued until all the pods are initialized, otherwise
+        # k8s will restart your pod(s) during initialization. The time will vary with the number of nodes and your k8s system load.
+#        livenessProbe:
+#          tcpSocket:
+#            port: external-client
+#          initialDelaySeconds: 30
+#          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: "/api/1.0/?Procedure=@Ping"
+            port: vmc
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        # The sample readinessProbe is in the voltdb kit in tools/kubernetes/bin.
         readinessProbe:
           exec:
             command:
-            - test `echo "exec @Ping;" | ../../bin/sqlcmd --output-skip-metadata --output-format=csv`
-          initialDelaySeconds: 5
+            - k8sReadyCheck.py
+          initialDelaySeconds: 30
           periodSeconds: 5
+          failureThreshold: 2
         env:
 #         Specify 'voltdb start ...' command line args (space separated list)
 #         IMPORTANT!!!! VoltDB requires linux kernel feature Transparent Huge Pages (THP) be DISABLED when running VoltDB in PRODUCTION.
 #         Uncomment next 2 lines to ignore THP settings on non-production systems.
-#          - name: VOLTDB_START_ARGS
-#            value: "--ignore=thp"
+          - name: VOLTDB_START_ARGS
+            value: "--ignore=thp"
 #          - name: VOLTDB_HEAPMAX
 #            value: "3072"
 #          - name: VOLTDB_OPTS

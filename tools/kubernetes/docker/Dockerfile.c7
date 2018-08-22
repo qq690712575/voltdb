@@ -20,7 +20,7 @@ EXPOSE 3021 4560 9090 5555
 RUN yum install -y sudo 
 RUN yum install -y alien
 RUN yum install -y java-1.8.0-openjdk-devel.x86_64
-RUN yum install -y libxml2 procps-ng python vim-minimal less
+RUN yum install -y libxml2 procps-ng python vim-minimal less curl jq
 RUN yum install -y bind-utils net-tools iputils telnet
 RUN yum install -y python2-pip python-setuptools python-devel
 RUN pip install --upgrade pip
@@ -43,7 +43,7 @@ WORKDIR /opt
 RUN mkdir -p $VOLTDB_DIST
 COPY ./ $VOLTDB_DIST/
 RUN rm -rf $VOLTDB_DIST/doc $VOLTDB_DIST/examples
-COPY tools/kubernetes/voltdbk8s.py $VOLTDB_DIST/bin
+COPY tools/kubernetes/bin/ $VOLTDB_DIST/bin
 
 # Initialize pristine voltdbroot - it will be copied to persistent storage on first run of the node (k8s)
 ENV VOLTDBPRISTINE=/opt/voltdb_pristine
@@ -60,6 +60,7 @@ RUN voltdb init --config $ASSETS/.deployment --schema=$ASSETS/.schema --classes=
 COPY ${IP_DIR}/.license         $VOLTDBPRISTINE/license.xml
 #COPY ${IP_DIR}/.log4j           $VOLTDBPRISTINE/log4j.properties
 
+WORKDIR /voltdbroot
 ENV NODECOUNT=$NODECOUNT
 ENV LEADER=localhost
 ENTRYPOINT voltdbk8s.py voltdb start -H $LEADER -c $NODECOUNT $VOLTDB_START_ARGS
