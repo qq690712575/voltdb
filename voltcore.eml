@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component inheritJdk="true">
+<component inherit-compiler-output="true" inheritJdk="true">
+	<output-test url="file://$MODULE_DIR$/tools/IntelliJ/out/test/voltcore"/>
 	<exclude-output/>
-	<contentEntry url="file://$MODULE_DIR$"/>
-	<lib name="commons-lang3-3.0.jar" scope="COMPILE">
+	<contentEntry url="file://$MODULE_DIR$">
+		<excludeFolder url="file://$MODULE_DIR$/src/catgen"/>
+	</contentEntry>
+	<lib name="commons-lang3-3.0.jar" scope="PROVIDED">
 		<relative-module-cls project-related="jar://$PROJECT_DIR$/../../lib/commons-lang3-3.0.jar!/"/>
 	</lib>
 	<lib name="jline-2.10.jar" scope="COMPILE">
@@ -86,10 +89,10 @@
 	<lib name="javaee-api-7.0.jar" scope="COMPILE">
 		<relative-module-cls project-related="jar://$PROJECT_DIR$/../../third_party/java/jars/javaee-api-7.0.jar!/"/>
 	</lib>
-	<lib name="kafka-clients-0.10.2.1.jar" scope="COMPILE">
+	<lib name="kafka-clients-0.10.2.1.jar" scope="PROVIDED">
 		<relative-module-cls project-related="jar://$PROJECT_DIR$/../../third_party/java/jars/kafka-clients-0.10.2.1.jar!/"/>
 	</lib>
-	<lib name="kafka-clients-0.8.2.2.jar" scope="COMPILE">
+	<lib name="kafka-clients-0.8.2.2.jar" scope="PROVIDED">
 		<relative-module-cls project-related="jar://$PROJECT_DIR$/../../lib/kafka-clients-0.8.2.2.jar!/"/>
 	</lib>
 	<lib name="kafka_2.11-0.8.2.2.jar" scope="COMPILE">
@@ -206,4 +209,7 @@
 	<lib name="jetty-security-9.3.21.v20170918.jar" scope="COMPILE">
 		<relative-module-cls project-related="jar://$PROJECT_DIR$/../../lib/jetty-security-9.3.21.v20170918.jar!/"/>
 	</lib>
+	<levels>
+		<level name="lib (2)" value="project"/>
+	</levels>
 </component>

@@ -147,6 +147,7 @@ public final class VoltTable extends VoltTableRow implements JSONString {
     static final String JSON_TYPE_KEY = "type";
     static final String JSON_SCHEMA_KEY = "schema";
     static final String JSON_DATA_KEY = "data";
+    static final String JSON_TABLES_KEY = "tables";
     static final String JSON_STATUS_KEY = "status";
 
     /**
@@ -1595,7 +1596,52 @@ public final class VoltTable extends VoltTableRow implements JSONString {
         }
         return js.toString();
     }
+    /**
+     * Get a JSON /api/2.0/ representation of this table.
+     * @return A string containing a JSON representation of this table.
+     */
+    public JSONStringer toJSONStringA2(JSONStringer js) {
+        //JSONStringer js = new JSONStringer();
+        try {
 
+//            js.object();
+
+//            // status code (1 byte)
+//            js.keySymbolValuePair(JSON_STATUS_KEY, getStatusCode());
+
+//            // column schema
+//            js.key(JSON_SCHEMA_KEY).array();
+//            for (int i = 0; i < getColumnCount(); i++) {
+//                js.object();
+//                js.keySymbolValuePair(JSON_NAME_KEY, getColumnName(i));
+//                js.keySymbolValuePair(JSON_TYPE_KEY, getColumnType(i).getValue());
+//                js.endObject();
+//            }
+//            js.endArray();
+
+            // row data
+            js.array();
+            VoltTableRow row = cloneRow();
+            row.resetRowPosition();
+            while (row.advanceRow()) {
+                js.object();
+                for (int i = 0; i < getColumnCount(); i++) {
+
+                    js.key(getColumnName(i));
+                    row.putJSONRep(i, js);
+                }
+                js.endObject();
+            }
+            js.endArray();
+
+//            js.endObject();
+        }
+        catch (JSONException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Failed to serialized a table to JSON.", e);
+        }
+        return js; //.toString();
+    }
     /**
      * Construct a table from a JSON string. Only parses VoltDB VoltTable JSON format.
      *

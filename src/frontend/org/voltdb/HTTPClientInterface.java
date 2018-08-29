@@ -17,28 +17,16 @@
 
 package org.voltdb;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
-
-import javax.servlet.http.HttpServletResponse;
-
+import com.google_voltpatches.common.base.Supplier;
+import com.google_voltpatches.common.base.Suppliers;
+import com.google_voltpatches.common.base.Throwables;
 import org.eclipse.jetty.continuation.Continuation;
 import org.eclipse.jetty.continuation.ContinuationListener;
 import org.eclipse.jetty.continuation.ContinuationSupport;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.util.B64Code;
-import org.ietf.jgss.GSSContext;
-import org.ietf.jgss.GSSException;
-import org.ietf.jgss.GSSManager;
-import org.ietf.jgss.GSSName;
-import org.ietf.jgss.Oid;
+import org.ietf.jgss.*;
 import org.voltcore.logging.Level;
 import org.voltcore.logging.VoltLogger;
 import org.voltcore.utils.EstTime;
@@ -52,11 +40,18 @@ import org.voltdb.security.AuthenticationRequest;
 import org.voltdb.utils.Base64;
 import org.voltdb.utils.Encoder;
 
-import com.google_voltpatches.common.base.Supplier;
-import com.google_voltpatches.common.base.Suppliers;
-import com.google_voltpatches.common.base.Throwables;
+import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 public class HTTPClientInterface {
 
@@ -113,13 +108,15 @@ public class HTTPClientInterface {
         final AtomicBoolean m_complete = new AtomicBoolean(false);
         final Continuation m_continuation;
         final String m_jsonp;
+        final ServletRequest m_request;
 
-        public JSONProcCallback(Continuation continuation, String jsonp) {
+        public JSONProcCallback(Continuation continuation, String jsonp, ServletRequest request) {
             assert continuation != null : "given continuation is null";
 
             m_continuation = continuation;
             m_continuation.addContinuationListener(this);
             m_jsonp = jsonp;
+            m_request = request;
         }
 
         @Override
@@ -135,7 +132,11 @@ public class HTTPClientInterface {
                 return;
             }
             ClientResponseImpl rimpl = (ClientResponseImpl) clientResponse;
-            String msg = rimpl.toJSONString();
+            String msg = null;
+            if ((((Request) m_request).getPathInfo()).equals("/api/2.0/"))
+                msg = rimpl.toJSONStringA2(2);
+            else
+                msg = rimpl.toJSONString();
 
             // handle jsonp pattern
             // http://en.wikipedia.org/wiki/JSON#The_Basic_Idea:_Retrieving_JSON_via_Script_Tags
@@ -321,7 +322,7 @@ public class HTTPClientInterface {
             continuation.suspend(response);
             suspended = true;
 
-            JSONProcCallback cb = new JSONProcCallback(continuation, jsonp);
+            JSONProcCallback cb = new JSONProcCallback(continuation, jsonp, request);
             boolean success;
             String hostname = request.getRemoteHost();
             if (params != null) {

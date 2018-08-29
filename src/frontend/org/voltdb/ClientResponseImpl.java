@@ -17,10 +17,6 @@
 
 package org.voltdb;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.concurrent.TimeUnit;
-
 import org.json_voltpatches.JSONException;
 import org.json_voltpatches.JSONString;
 import org.json_voltpatches.JSONStringer;
@@ -29,6 +25,10 @@ import org.voltdb.client.ClientResponse;
 import org.voltdb.client.ClientUtils;
 import org.voltdb.common.Constants;
 import org.voltdb.utils.SerializationHelper;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Packages up the data to be sent back to the client as a stored
@@ -345,7 +345,6 @@ public class ClientResponseImpl implements ClientResponse, JSONString {
         return js.toString();
     }
 
-
     @Override
     public String toJSONString() {
         JSONStringer js = new JSONStringer();
@@ -360,6 +359,33 @@ public class ClientResponseImpl implements ClientResponse, JSONString {
             js.array();
             for (VoltTable o : results) {
                 js.value(o);
+            }
+            js.endArray();
+
+            js.endObject();
+        }
+        catch (JSONException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Failed to serialize a parameter set to JSON.", e);
+        }
+        return js.toString();
+    }
+
+    public String toJSONStringA2(int api_version) {
+        JSONStringer js = new JSONStringer();
+        try {
+            js.object();
+
+            js.keySymbolValuePair(JSON_STATUS_KEY, status);
+            js.keySymbolValuePair(JSON_APPSTATUS_KEY, appStatus);
+            js.keySymbolValuePair(JSON_STATUSSTRING_KEY, statusString);
+            js.keySymbolValuePair(JSON_APPSTATUSSTRING_KEY, appStatusString);
+            js.key(JSON_RESULTS_KEY);
+            js.array();
+            for (int i=0; i<results.length; i++) {
+                VoltTable o = results[i];
+                if (api_version == 2)
+                    o.toJSONStringA2(js);  // returns a stringer array
             }
             js.endArray();
 
