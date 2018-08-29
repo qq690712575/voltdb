@@ -155,7 +155,7 @@ if __name__ == "__main__":
     print fqhostname
 
     # for maintenance mode, don't bring up the database just hang
-    if '--maintenance' in sys.argv:
+    if '--k8s-maintenance' in sys.argv:
         while True:
             from time import sleep
             sleep(10000)

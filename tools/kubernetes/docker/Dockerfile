@@ -3,6 +3,9 @@
 # This file is part of VoltDB.
 # Copyright (C) 2008-2018 VoltDB Inc.
 
+# VoltDB pristine container
+# This container is intended for k8s stateful set deployments
+
 FROM ubuntu:16.04
 MAINTAINER Phil Rosgay <prosegay@voltdb.com>
 
@@ -18,7 +21,7 @@ EXPOSE 3021 4560 9090 5555
 
 # Set up environment
 RUN apt-get update
-RUN apt-get -y --no-install-recommends --no-install-suggests install sudo software-properties-common
+RUN apt-get -y --no-install-recommends --no-install-suggests install sudo software-properties-common python-software-properties
 RUN apt-get -y --no-install-recommends --no-install-suggests install alien
 RUN add-apt-repository ppa:webupd8team/java
 RUN apt-get update
@@ -42,28 +45,39 @@ ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Create necessary directories
+# Create necessary directories, voltdb-kit, voltdb_pristine
 WORKDIR /opt
+
 RUN mkdir -p $VOLTDB_DIST
 COPY ./ $VOLTDB_DIST/
 RUN rm -rf $VOLTDB_DIST/doc $VOLTDB_DIST/examples
 COPY tools/kubernetes/bin/ $VOLTDB_DIST/bin
 
-# Initialize pristine voltdbroot - it will be copied to persistent storage on first run of the node (k8s)
+# Setup pristine voltdbroot - it will be copied to persistent storage on first run of the node (k8s)
 ENV VOLTDBPRISTINE=/opt/voltdb_pristine
 ENV ASSETS=$VOLTDBPRISTINE/.assets
 RUN mkdir -p $ASSETS
 COPY ${IP_DIR}/                 $ASSETS/
 # nb. lib-extension is empty in the kit
 COPY ${IP_DIR}/.extension/      $VOLTDB_DIST/lib/extension/
-# copy bundles files from the distribution, then overlay user's bundles files, if any
+
+# Copy bundles files from the distribution, then overlay user's bundles files, if any
 COPY ./bundles/                 $VOLTDB_DIST/bundles/
 COPY ${IP_DIR}/.bundles/        $VOLTDB_DIST/bundles/
+
+# !!!
 WORKDIR $VOLTDBPRISTINE
+# TODO !!! don't change the working directory beyond this point, it will break things
+
+# Emit a reinit command sequence
+RUN echo "voltdb init --config $ASSETS/.deployment --schema=$ASSETS/.schema --classes=$ASSETS/.classes" > reinit.sh
+
+# Initialize the database with provided configuration and assets
 RUN voltdb init --config $ASSETS/.deployment --schema=$ASSETS/.schema --classes=$ASSETS/.classes
 COPY ${IP_DIR}/.license         $VOLTDBPRISTINE/license.xml
 #COPY ${IP_DIR}/.log4j           $VOLTDBPRISTINE/log4j.properties
 
+# Setup the container run-time environment
 ENV NODECOUNT=$NODECOUNT
 ENV LEADER=localhost
 ENTRYPOINT voltdbk8s.py voltdb start -H $LEADER -c $NODECOUNT $VOLTDB_START_ARGS
