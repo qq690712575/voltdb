@@ -161,7 +161,7 @@ public class MpScheduler extends Scheduler
             VoltMessage resp = counter.getLastResponse();
             if (resp != null && resp instanceof InitiateResponseMessage) {
                 InitiateResponseMessage msg = (InitiateResponseMessage)resp;
-                if (msg.shouldCommit()) {
+                if (msg.shouldCommit() && msg.haveSentMpFragment()) {
                     m_repairLogTruncationHandle = m_repairLogAwaitingCommit;
                     m_repairLogAwaitingCommit = msg.getTxnId();
                 }
@@ -453,13 +453,17 @@ public class MpScheduler extends Scheduler
             traceLog.add(() -> VoltTrace.endAsync("initmp", message.getTxnId()));
         }
 
+        if (message.getClientResponseData().getHashes() == null) {
+            tmLog.warn("The transaction response has no hash:" + message);
+        }
         DuplicateCounter counter = m_duplicateCounters.get(message.getTxnId());
         if (counter != null) {
             int result = counter.offer(message);
             if (result == DuplicateCounter.DONE) {
                 m_duplicateCounters.remove(message.getTxnId());
-                // Only advance the truncation point on committed transactions.  See ENG-4211
-                if (message.shouldCommit()) {
+                // Only advance the truncation point on committed transactions that sent fragments to SPIs.
+                // See ENG-4211 & ENG-14563
+                if (message.shouldCommit() && message.haveSentMpFragment()) {
                     m_repairLogTruncationHandle = m_repairLogAwaitingCommit;
                     m_repairLogAwaitingCommit = message.getTxnId();
                 }
@@ -475,15 +479,20 @@ public class MpScheduler extends Scheduler
             // doing duplicate suppresion: all done.
         }
         else {
-            // Only advance the truncation point on committed transactions.
-            if (message.shouldCommit()) {
+            // Only advance the truncation point on committed transactions that sent fragments to SPIs.
+            if (message.shouldCommit() && message.haveSentMpFragment()) {
                 m_repairLogTruncationHandle = m_repairLogAwaitingCommit;
                 m_repairLogAwaitingCommit = message.getTxnId();
             }
             MpTransactionState txn = (MpTransactionState)m_outstandingTxns.remove(message.getTxnId());
             assert(txn != null);
+
             // the initiatorHSId is the ClientInterface mailbox. Yeah. I know.
             m_mailbox.send(message.getInitiatorHSId(), message);
+            if (txn == null) {
+                tmLog.warn("The transaction has been completed:" + message);
+            }
+
             // We actually completed this MP transaction.  Create a fake CompleteTransactionMessage
             // to send to our local repair log so that the fate of this transaction is never forgotten
             // even if all the masters somehow die before forwarding Complete on to their replicas.
