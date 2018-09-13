@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.commons.lang3.StringUtils;
 import org.voltcore.logging.VoltLogger;
@@ -37,11 +38,14 @@ import org.voltdb.VoltDB;
 import org.voltdb.VoltTable;
 import org.voltdb.VoltType;
 import org.voltdb.VoltTypeException;
+import org.voltdb.catalog.Catalog;
 import org.voltdb.catalog.Database;
+import org.voltdb.catalog.org.voltdb.calciteadaptor.CatalogAdapter;
 import org.voltdb.client.ClientResponse;
 import org.voltdb.compiler.AdHocPlannedStatement;
 import org.voltdb.compiler.AdHocPlannedStmtBatch;
 import org.voltdb.compiler.PlannerTool;
+import org.voltdb.compiler.VoltCompiler;
 import org.voltdb.parser.SQLLexer;
 import org.voltdb.planner.StatementPartitioning;
 import org.voltdb.utils.MiscUtils;
@@ -73,6 +77,16 @@ public abstract class AdHocNTBase extends UpdateApplicationBase {
             new MiscUtils.BooleanSystemProperty("asynccompilerdebug");
 
     BackendTarget m_backendTargetType = VoltDB.instance().getBackendTargetType();
+    static final SchemaPlus m_schemaPlus;
+    /*= CatalogAdapter.schemaPlusFromDatabase(
+            VoltCompiler.initCatalogDatabase(VoltDB.instance().getCatalogContext().catalog)));*/
+    static {
+        final Catalog catalog = new Catalog();      // from VoltCompiler.compileCatalogInternal()
+        // Initialize the catalog for one cluster
+        catalog.execute("add / clusters cluster");
+        catalog.getClusters().get("cluster").setSecurityenabled(false);
+        m_schemaPlus = CatalogAdapter.schemaPlusFromDatabase(VoltCompiler.initCatalogDatabase(catalog));
+    }
     boolean m_isConfiguredForNonVoltDBBackend = (m_backendTargetType == BackendTarget.HSQLDB_BACKEND ||
                                                  m_backendTargetType == BackendTarget.POSTGRESQL_BACKEND ||
                                                  m_backendTargetType == BackendTarget.POSTGIS_BACKEND);

@@ -17,25 +17,34 @@
 
 package org.voltdb.sysprocs;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.ddl.SqlColumnDeclaration;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.voltdb.ClientInterface.ExplainMode;
 import org.voltdb.ParameterSet;
 import org.voltdb.VoltDB;
+import org.voltdb.VoltType;
+import org.voltdb.calciteadapter.rel.VoltDBTable;
+import org.voltdb.catalog.Catalog;
+import org.voltdb.catalog.Column;
+import org.voltdb.catalog.Database;
+import org.voltdb.catalog.Table;
+import org.voltdb.catalog.org.voltdb.calciteadaptor.CatalogAdapter;
 import org.voltdb.client.ClientResponse;
+import org.voltdb.compiler.VoltCompiler;
 import org.voltdb.parser.ParserFactory;
 import org.voltdb.parser.SQLLexer;
+import org.voltdb.sysprocs.org.voltdb.calciteadapter.ColumnType;
+import org.voltdb.utils.CatalogUtil;
 
 public class AdHoc extends AdHocNTBase {
 
@@ -95,7 +104,7 @@ public class AdHoc extends AdHocNTBase {
         }
 
         if (isDDLBatch) {
-            return runDDLBatch(sqlList);
+            return runDDLBatch(sqlList, rootNodesOfParsedQueries);
         } else {
             // This is where we run non-DDL SQL statements
             return runNonDDLAdHoc(VoltDB.instance().getCatalogContext(),
@@ -158,13 +167,57 @@ public class AdHoc extends AdHocNTBase {
         // at this point assume all DDL
         assert(mix == AdHocSQLMix.ALL_DDL);
 
-        return runDDLBatch(sqlStatements);
+        return runDDLBatch(sqlStatements, null);
     }
 
-    private CompletableFuture<ClientResponse> runDDLBatch(List<String> sqlStatements) {
+    private static void addTable(SqlNode node, SchemaPlus calciteSchema) {
+        final List<SqlNode> nameAndColListAndQuery = ((SqlCreateTable) node).getOperandList();
+        final String tableName = nameAndColListAndQuery.get(0).toString();
+        final Table t = VoltDB.instance().getCatalogContext().database.getTables().add(tableName);
+
+        final AtomicInteger index = new AtomicInteger(0);
+        final SortedMap<Integer, VoltType> columnTypes = new TreeMap<>();
+        // TODO: need to do guards for columns
+        ((SqlNodeList) nameAndColListAndQuery.get(1)).forEach(c -> {
+            final List<SqlNode> nameAndType = ((SqlColumnDeclaration) c).getOperandList();
+            final String colName = nameAndType.get(0).toString();
+            final Column column = t.getColumns().add(colName);
+            column.setName(colName);
+            // TODO: m_typename <- m_name
+            final SqlDataTypeSpec type = (SqlDataTypeSpec) nameAndType.get(1);
+            //final int scale = type.getScale();
+            final int precision = type.getPrecision();
+            final VoltType vt = ColumnType.getVoltType(type.getTypeName().toString());
+            column.setType(vt.getValue());
+            column.setNullable(type.getNullable());
+            column.setSize(Integer.max(precision, vt.getLengthInBytesForFixedTypesWithoutCheck()));  // TODO: -1 for int types
+            column.setIndex(index.getAndIncrement());
+            columnTypes.put(index.get(), vt);
+            column.setInbytes(vt == VoltType.STRING);
+            // NOTE/TODO: SqlNode does not contain default value
+            column.setDefaultvalue("");
+        });
+        t.setSignature(CatalogUtil.getSignatureForTable(tableName, columnTypes));
+        calciteSchema.add(tableName, new VoltDBTable(t));
+    }
+
+    private CompletableFuture<ClientResponse> runDDLBatch(List<String> sqlStatements, List<SqlNode> nodes) {
+        // Add to Calcite catalog
+        nodes.forEach(node -> {
+            if (node.getKind() == SqlKind.CREATE_TABLE) {
+                addTable(node, m_schemaPlus);
+            }
+        });
+        System.out.println("Database has tables:");
+        StreamSupport.stream(((Iterable<Table>) () ->
+                VoltDB.instance().getCatalogContext().database.getTables().iterator()).spliterator(), false)
+                .forEach(t -> System.out.println(t.getSignature()));
+        System.out.println("SQL stmts:");
+        sqlStatements.forEach(stmt -> System.out.println(stmt));
+        System.out.println("---- ---- ---- ----");
         // conflictTables tracks dropped tables before removing the ones that don't have CREATEs.
-        SortedSet<String> conflictTables = new TreeSet<String>();
-        Set<String> createdTables = new HashSet<String>();
+        SortedSet<String> conflictTables = new TreeSet<>();
+        Set<String> createdTables = new HashSet<>();
 
         for (String stmt : sqlStatements) {
             // check that the DDL is allowed
@@ -225,7 +278,8 @@ public class AdHoc extends AdHocNTBase {
         return updateApplication("@AdHoc",
                                 null,
                                 null,
-                                sqlStatements.toArray(new String[0]),
+                                //sqlStatements.toArray(new String[0]),
+                sqlStatements.stream().filter(stmt -> !SQLLexer.extractDDLToken(stmt).equals("create")).collect(Collectors.toList()).toArray(new String[0]),
                                 null,
                                 false,
                                 true);
