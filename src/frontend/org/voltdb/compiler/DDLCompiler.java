@@ -22,6 +22,7 @@ import java.io.Reader;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -835,7 +836,7 @@ public class DDLCompiler {
             if (node.name.equals("table")) {
                 addTableToCatalog(db, node, isXDCR);
             }
-        }
+        } // NOTE: do not add table from HSQL
 
         fillTrackerFromXML();
         handlePartitions(db);
@@ -1241,7 +1242,16 @@ public class DDLCompiler {
         HashMap<String, Index> indexMap = new HashMap<>();
 
         final String name = node.attributes.get("name");
-
+        final AtomicBoolean hasCreated = new AtomicBoolean(false);
+        db.getTables().forEach(tbl -> {
+            if (tbl.getTypeName().equals(name)) {
+                System.err.println("Table " + name + " has already been created!");
+                hasCreated.set(true);
+            }
+        });
+        if(hasCreated.get()) {
+            return;
+        }
         // create a table node in the catalog
         final Table table = db.getTables().add(name);   // NOTE: start to create table
         // set max value before return for view table

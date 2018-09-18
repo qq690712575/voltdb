@@ -170,10 +170,10 @@ public class AdHoc extends AdHocNTBase {
         return runDDLBatch(sqlStatements, null);
     }
 
-    private static void addTable(SqlNode node, SchemaPlus calciteSchema) {
+    public static SchemaPlus addTable(SqlNode node, Database db) {
         final List<SqlNode> nameAndColListAndQuery = ((SqlCreateTable) node).getOperandList();
         final String tableName = nameAndColListAndQuery.get(0).toString();
-        final Table t = VoltDB.instance().getCatalogContext().database.getTables().add(tableName);
+        final Table t = db.getTables().add(tableName);
 
         final AtomicInteger index = new AtomicInteger(0);
         final SortedMap<Integer, VoltType> columnTypes = new TreeMap<>();
@@ -198,23 +198,23 @@ public class AdHoc extends AdHocNTBase {
             column.setDefaultvalue("");
         });
         t.setSignature(CatalogUtil.getSignatureForTable(tableName, columnTypes));
-        calciteSchema.add(tableName, new VoltDBTable(t));
+        return CatalogAdapter.schemaPlusFromDatabase(db);
     }
 
-    private CompletableFuture<ClientResponse> runDDLBatch(List<String> sqlStatements, List<SqlNode> nodes) {
+    private CompletableFuture<ClientResponse> runDDLBatch(List<String> sqlStatements, List<SqlNode> sqlNodes) {
         // Add to Calcite catalog
-        nodes.forEach(node -> {
+        /*nodes.forEach(node -> {
             if (node.getKind() == SqlKind.CREATE_TABLE) {
                 addTable(node, m_schemaPlus);
             }
-        });
-        System.out.println("Database has tables:");
+        });*/
+        System.err.println("Database has tables:");
         StreamSupport.stream(((Iterable<Table>) () ->
                 VoltDB.instance().getCatalogContext().database.getTables().iterator()).spliterator(), false)
-                .forEach(t -> System.out.println(t.getSignature()));
-        System.out.println("SQL stmts:");
+                .forEach(t -> System.err.println(t.getSignature()));
+        System.err.println("SQL stmts:");
         sqlStatements.forEach(stmt -> System.out.println(stmt));
-        System.out.println("---- ---- ---- ----");
+        System.err.println("---- ---- ---- ----");
         // conflictTables tracks dropped tables before removing the ones that don't have CREATEs.
         SortedSet<String> conflictTables = new TreeSet<>();
         Set<String> createdTables = new HashSet<>();
@@ -278,8 +278,8 @@ public class AdHoc extends AdHocNTBase {
         return updateApplication("@AdHoc",
                                 null,
                                 null,
-                                //sqlStatements.toArray(new String[0]),
-                sqlStatements.stream().filter(stmt -> !SQLLexer.extractDDLToken(stmt).equals("create")).collect(Collectors.toList()).toArray(new String[0]),
+                                sqlStatements.toArray(new String[0]), sqlNodes,
+                //sqlStatements.stream().filter(stmt -> !SQLLexer.extractDDLToken(stmt).equals("create")).collect(Collectors.toList()).toArray(new String[0]),
                                 null,
                                 false,
                                 true);

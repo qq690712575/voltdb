@@ -17,6 +17,7 @@
 
 package org.voltdb.sysprocs;
 
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 import org.voltdb.VoltDB;
@@ -58,7 +59,7 @@ public class UpdateApplicationCatalog extends UpdateApplicationBase {
         return updateApplication("@UpdateApplicationCatalog",
                                 catalogJarBytes,
                                 deploymentString,
-                                new String[0],
+                                new String[0], new ArrayList<>(),
                                 null,
                                 false, /* isPromotion */
                                 useDDLSchema);
