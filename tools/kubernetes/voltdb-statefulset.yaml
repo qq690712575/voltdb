@@ -1,3 +1,20 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: voltdb-proxy---clusterName--
+  annotations:
+    cloud.google.com/load-balancer-type: "Internal"
+spec:
+  selector:
+    app: --clusterName--
+  ports:
+  - protocol: TCP
+    port: 5555
+    targetPort: 5555
+#  clusterIP: 10.0.171.239
+  loadBalancerIP: 10.20.0.10
+  type: LoadBalancer
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -31,6 +48,12 @@ spec:
       labels:
         app: --clusterName--
     spec:
+      # specify fixed ips locally for replication partners
+      # these addresses must be routable from the pod
+      hostAliases:
+      - ip: "10.10.0.10"
+        hostnames:
+        - "voltdb-sfo"
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
