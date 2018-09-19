@@ -12,72 +12,56 @@ import sys
 import os
 import subprocess
 
+
+def do_cmd(cmd):
+    r = subprocess.check_output(cmd, shell=True).strip().replace('null', 'None')
+    R = eval(r)
+    return R
+
+
 # subprocess.check_output was introduced in 2.7, let's be sure.
 if sys.hexversion < 0x02070000:
     raise Exception("Python version 2.7 or greater is required.")
 
-HOST = os.environ["HOSTNAME"]
-PORT = 21211
+HOSTNAME = os.environ['HOSTNAME']
 
-# @contextmanager
-# def open_admin_client(host, port, username=None, password=None, enable_ssl=False):
-#     pyclient = None
-#     try:
-#         pyclient = vclient(host=host,
-#                                   port=port,
-#                                   connect_timeout=60,
-#                                   procedure_timeout=60,
-#                                   default_timeout=60,
-#                                   usessl=enable_ssl,
-#                                   username=username,
-#                                   password=password)
-#         yield pyclient
-#
-#     except Exception as e:
-#         raise Exception("[" + host + ":" + port + "]" + str(e))
-#
-#     finally:
-#         if pyclient:
-#             pyclient.close()
-#
-#
-# def call_volt_procedure(proc, parms=[], bindvars=[]):
-#     with open_admin_client(HOST, PORT) as client:
-#         ph = VoltProcedure(client, proc, parms)
-#         if type(bindvars) != list:
-#             result = ph.call([bindvars])
-#         else:
-#             result = ph.call(bindvars)
-#     if result.status != 1:
-#         raise Exception(result)
-#     return result
-#
-#
-# result = call_volt_procedure("@PingPartitions", [vclient.VOLTTYPE_BIGINT], [0])
-# print result
+URL = "curl -sg http://localhost:8080/api/2.0/"
 
-# PingPartitions will transactionally check all partitions for availibility, it returns 0 on success.
-# nb. the cluster will appear not-ready if the database is paused.
-cmd = """curl -sg http://localhost:8080/api/2.0/?Procedure=@PingPartitions\&Parameters=\[0\] \
-        | jq '.status,.statusstring' \
-        | xargs"""
-r = subprocess.check_output(cmd, shell=True).strip()
-if r[0] != "1":
-        print r
+# Check PingPartitions verifies that transactions are being processed
+# If the database is Paused, it will appear not-ready to k8s
+cmd = URL+"""?Procedure=@PingPartitions\&Parameters=\[0\] \
+        | jq -c '[.status,.statusstring]' """
+r = do_cmd(cmd)
+if r[0] != 1:
+        print "Database is not processing transactions '%s'" % r[1]
         sys.exit(1)
 
-# # DRROLE: find any/all clusters which are not actively replicating
-# cmd = """curl -sg http://localhost:8080/api/1.0/?Procedure=@Statistics\&Parameters=\['DRROLE'\] | jq -cr '[.results[][]]'"""
-# raw_drrole = subprocess.check_output(cmd, shell=True).strip()
-# if len(raw_drrole) == 0:
-#     sys.exit(0)
-# drrole=eval(raw_drrole)
-# if len(drrole) > 0:
-#     for t in drrole:
-#         print t
-# if r != '"ACTIVE"':
-#         print "Database replication is NOT syncing (%s)" % r
-#         sys.exit(1)
+# Check DRROLE for this host, STATE=='STOPPED' fail readiness
+cmd = URL+"""?Procedure=@Statistics\&Parameters=["DRROLE"] | jq -c '[.results."0"[] | .ROLE,.STATE]'"""
+r = do_cmd(cmd)
+DR_ROLE = r[0]
 
-# everything is ok
-sys.exit(0)
+# if Database Replication (DR) is not configured, skip the remaining DR checks
+if DR_ROLE == "NONE":
+        sys.exit(0)
+
+# if DRROLE reports anything but ACTIVE, a DR exception has most likely occurred
+if r[1] != "ACTIVE":
+        print "Database replication has failed, DRROLE is '%s'" % r  # print error for k8s
+        sys.exit(1)
+
+# Check DRCONSUMER IS_COVERED for this host, any false responses fail readiness
+cmd = URL+"""?Procedure=@Statistics\&Parameters=\["DRCONSUMER",0\] \
+         | jq -c '[[.results][]."1"[] | select(.HOSTNAME | startswith("%s")) | select(.IS_COVERED == "false") | .REMOTE_CLUSTER_ID] | unique'""" % HOSTNAME
+r = do_cmd(cmd)
+if len(r) > 0:
+        print "Database Replication Consumer has failed, some remote cluster partitions are not covered: '%s'" % r
+        sys.exit(1)
+
+# Check DRPRODUCER MODE for this host's consumer connections, if any "NOT_CONNECTED" for this host, fail readiness
+cmd = URL+"""?Procedure=@Statistics\&Parameters=\["DRPRODUCER",0\] \
+        | jq -c '[[.results][]."0"[] | select(.HOSTNAME | startswith("%s")) | select(.MODE == "NOT_CONNECTED") | .REMOTE_CLUSTER_ID] | unique'""" % HOSTNAME
+r = do_cmd(cmd)
+if len(r) > 0:
+        print "Database Replication Producer connection to cluster-id(s) '%s' has failed." % r
+        sys.exit(1)
